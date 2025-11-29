@@ -526,7 +526,12 @@ CREATE POLICY "Reviews: Users can create"
   ON reviews FOR INSERT
   WITH CHECK (auth.uid() = user_id);
 
--- Users can update/delete their own reviews
-CREATE POLICY "Reviews: Users can manage own"
-  ON reviews FOR UPDATE, DELETE
+-- Users can update their own reviews
+CREATE POLICY "Reviews: Users can update own"
+  ON reviews FOR UPDATE
+  USING (auth.uid() = user_id);
+
+-- Users can delete their own reviews
+CREATE POLICY "Reviews: Users can delete own"
+  ON reviews FOR DELETE
   USING (auth.uid() = user_id);
