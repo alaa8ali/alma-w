@@ -1,6 +1,6 @@
 import { supabase } from './supabaseClient';
 
-export interface Trip {
+export interface ServiceRequest {
   id: string;
   userId: string;
   driverId?: string;
@@ -27,15 +27,15 @@ export interface Trip {
   updatedAt: string;
 }
 
-export interface TripsResponse {
+export interface ServiceRequestsResponse {
   success: boolean;
-  data: Trip[];
+  data: ServiceRequest[];
   total: number;
 }
 
-export const tripService = {
-  // Request a trip
-  requestTrip: async (tripData: Partial<Trip>): Promise<Trip | null> => {
+export const serviceRequestService = {
+  // Request a serviceRequest
+  requestServiceRequest: async (serviceRequestData: Partial<ServiceRequest>): Promise<ServiceRequest | null> => {
     try {
       const { data: sessionData } = await supabase.auth.getSession();
       if (!sessionData.session?.user) {
@@ -43,11 +43,11 @@ export const tripService = {
       }
 
       const { data, error } = await supabase
-        .from('trips')
+        .from('service_requests')
         .insert([
           {
             user_id: sessionData.session.user.id,
-            ...tripData,
+            ...serviceRequestData,
             status: 'pending',
             payment_status: 'pending',
           },
@@ -59,35 +59,35 @@ export const tripService = {
         throw error;
       }
 
-      return data as Trip;
+      return data as ServiceRequest;
     } catch (error: any) {
-      console.error('Error requesting trip:', error);
+      console.error('Error requesting serviceRequest:', error);
       return null;
     }
   },
 
-  // Get trip by ID
-  getTripById: async (tripId: string): Promise<Trip | null> => {
+  // Get serviceRequest by ID
+  getServiceRequestById: async (serviceRequestId: string): Promise<ServiceRequest | null> => {
     try {
       const { data, error } = await supabase
-        .from('trips')
+        .from('service_requests')
         .select('*')
-        .eq('id', tripId)
+        .eq('id', serviceRequestId)
         .single();
 
       if (error) {
         throw error;
       }
 
-      return data as Trip;
+      return data as ServiceRequest;
     } catch (error: any) {
-      console.error('Error fetching trip:', error);
+      console.error('Error fetching serviceRequest:', error);
       return null;
     }
   },
 
-  // Get user trips
-  getUserTrips: async (page = 1, limit = 10): Promise<TripsResponse> => {
+  // Get user serviceRequests
+  getUserServiceRequests: async (page = 1, limit = 10): Promise<ServiceRequestsResponse> => {
     try {
       const { data: sessionData } = await supabase.auth.getSession();
       if (!sessionData.session?.user) {
@@ -100,7 +100,7 @@ export const tripService = {
 
       const from = (page - 1) * limit;
       const { data, error, count } = await supabase
-        .from('trips')
+        .from('service_requests')
         .select('*', { count: 'exact' })
         .eq('user_id', sessionData.session.user.id)
         .order('createdAt', { ascending: false })
@@ -112,11 +112,11 @@ export const tripService = {
 
       return {
         success: true,
-        data: data as Trip[],
+        data: data as ServiceRequest[],
         total: count || 0,
       };
     } catch (error: any) {
-      console.error('Error fetching user trips:', error);
+      console.error('Error fetching user serviceRequests:', error);
       return {
         success: false,
         data: [],
@@ -125,12 +125,12 @@ export const tripService = {
     }
   },
 
-  // Get driver trips
-  getDriverTrips: async (driverId: string, page = 1, limit = 10): Promise<TripsResponse> => {
+  // Get driver serviceRequests
+  getDriverServiceRequests: async (driverId: string, page = 1, limit = 10): Promise<ServiceRequestsResponse> => {
     try {
       const from = (page - 1) * limit;
       const { data, error, count } = await supabase
-        .from('trips')
+        .from('service_requests')
         .select('*', { count: 'exact' })
         .eq('driver_id', driverId)
         .order('createdAt', { ascending: false })
@@ -142,11 +142,11 @@ export const tripService = {
 
       return {
         success: true,
-        data: data as Trip[],
+        data: data as ServiceRequest[],
         total: count || 0,
       };
     } catch (error: any) {
-      console.error('Error fetching driver trips:', error);
+      console.error('Error fetching driver serviceRequests:', error);
       return {
         success: false,
         data: [],
@@ -155,16 +155,16 @@ export const tripService = {
     }
   },
 
-  // Accept trip (driver)
-  acceptTrip: async (tripId: string, driverId: string): Promise<Trip | null> => {
+  // Accept serviceRequest (driver)
+  acceptServiceRequest: async (serviceRequestId: string, driverId: string): Promise<ServiceRequest | null> => {
     try {
       const { data, error } = await supabase
-        .from('trips')
+        .from('service_requests')
         .update({
           driver_id: driverId,
           status: 'accepted',
         })
-        .eq('id', tripId)
+        .eq('id', serviceRequestId)
         .select()
         .single();
 
@@ -172,22 +172,22 @@ export const tripService = {
         throw error;
       }
 
-      return data as Trip;
+      return data as ServiceRequest;
     } catch (error: any) {
-      console.error('Error accepting trip:', error);
+      console.error('Error accepting serviceRequest:', error);
       return null;
     }
   },
 
-  // Start trip (driver)
-  startTrip: async (tripId: string): Promise<Trip | null> => {
+  // Start serviceRequest (driver)
+  startServiceRequest: async (serviceRequestId: string): Promise<ServiceRequest | null> => {
     try {
       const { data, error } = await supabase
-        .from('trips')
+        .from('service_requests')
         .update({
           status: 'in_progress',
         })
-        .eq('id', tripId)
+        .eq('id', serviceRequestId)
         .select()
         .single();
 
@@ -195,33 +195,33 @@ export const tripService = {
         throw error;
       }
 
-      return data as Trip;
+      return data as ServiceRequest;
     } catch (error: any) {
-      console.error('Error starting trip:', error);
+      console.error('Error starting serviceRequest:', error);
       return null;
     }
   },
 
-  // Complete trip (driver)
-  completeTrip: async (tripId: string): Promise<Trip | null> => {
+  // Complete serviceRequest (driver)
+  completeServiceRequest: async (serviceRequestId: string): Promise<ServiceRequest | null> => {
     try {
-      const trip = await tripService.getTripById(tripId);
-      if (!trip) {
-        throw new Error('Trip not found');
+      const serviceRequest = await serviceRequestService.getServiceRequestById(serviceRequestId);
+      if (!serviceRequest) {
+        throw new Error('ServiceRequest not found');
       }
 
       const actualDuration = Math.floor(
-        (new Date().getTime() - new Date(trip.createdAt).getTime()) / 60000
+        (new Date().getTime() - new Date(serviceRequest.createdAt).getTime()) / 60000
       );
 
       const { data, error } = await supabase
-        .from('trips')
+        .from('service_requests')
         .update({
           status: 'completed',
           actual_duration: actualDuration,
           payment_status: 'pending',
         })
-        .eq('id', tripId)
+        .eq('id', serviceRequestId)
         .select()
         .single();
 
@@ -229,22 +229,22 @@ export const tripService = {
         throw error;
       }
 
-      return data as Trip;
+      return data as ServiceRequest;
     } catch (error: any) {
-      console.error('Error completing trip:', error);
+      console.error('Error completing serviceRequest:', error);
       return null;
     }
   },
 
-  // Cancel trip
-  cancelTrip: async (tripId: string): Promise<Trip | null> => {
+  // Cancel serviceRequest
+  cancelServiceRequest: async (serviceRequestId: string): Promise<ServiceRequest | null> => {
     try {
       const { data, error } = await supabase
-        .from('trips')
+        .from('service_requests')
         .update({
           status: 'cancelled',
         })
-        .eq('id', tripId)
+        .eq('id', serviceRequestId)
         .select()
         .single();
 
@@ -252,23 +252,23 @@ export const tripService = {
         throw error;
       }
 
-      return data as Trip;
+      return data as ServiceRequest;
     } catch (error: any) {
-      console.error('Error cancelling trip:', error);
+      console.error('Error cancelling serviceRequest:', error);
       return null;
     }
   },
 
-  // Rate trip
-  rateTrip: async (tripId: string, rating: number, comment?: string): Promise<Trip | null> => {
+  // Rate serviceRequest
+  rateServiceRequest: async (serviceRequestId: string, rating: number, comment?: string): Promise<ServiceRequest | null> => {
     try {
       const { data, error } = await supabase
-        .from('trips')
+        .from('service_requests')
         .update({
           rating,
           comment,
         })
-        .eq('id', tripId)
+        .eq('id', serviceRequestId)
         .select()
         .single();
 
@@ -276,18 +276,18 @@ export const tripService = {
         throw error;
       }
 
-      return data as Trip;
+      return data as ServiceRequest;
     } catch (error: any) {
-      console.error('Error rating trip:', error);
+      console.error('Error rating serviceRequest:', error);
       return null;
     }
   },
 
-  // Get pending trips (for drivers)
-  getPendingTrips: async (): Promise<Trip[]> => {
+  // Get pending serviceRequests (for drivers)
+  getPendingServiceRequests: async (): Promise<ServiceRequest[]> => {
     try {
       const { data, error } = await supabase
-        .from('trips')
+        .from('service_requests')
         .select('*')
         .eq('status', 'pending')
         .order('createdAt', { ascending: true });
@@ -296,20 +296,20 @@ export const tripService = {
         throw error;
       }
 
-      return data as Trip[];
+      return data as ServiceRequest[];
     } catch (error: any) {
-      console.error('Error fetching pending trips:', error);
+      console.error('Error fetching pending serviceRequests:', error);
       return [];
     }
   },
 
-  // Update trip status
-  updateTripStatus: async (tripId: string, status: string): Promise<Trip | null> => {
+  // Update serviceRequest status
+  updateServiceRequestStatus: async (serviceRequestId: string, status: string): Promise<ServiceRequest | null> => {
     try {
       const { data, error } = await supabase
-        .from('trips')
+        .from('service_requests')
         .update({ status })
-        .eq('id', tripId)
+        .eq('id', serviceRequestId)
         .select()
         .single();
 
@@ -317,18 +317,18 @@ export const tripService = {
         throw error;
       }
 
-      return data as Trip;
+      return data as ServiceRequest;
     } catch (error: any) {
-      console.error('Error updating trip status:', error);
+      console.error('Error updating serviceRequest status:', error);
       return null;
     }
   },
 
-  // Get trip statistics
-  getTripStatistics: async (userId: string) => {
+  // Get serviceRequest statistics
+  getServiceRequestStatistics: async (userId: string) => {
     try {
-      const { data: trips, error } = await supabase
-        .from('trips')
+      const { data: serviceRequests, error } = await supabase
+        .from('service_requests')
         .select('*')
         .eq('user_id', userId);
 
@@ -336,22 +336,22 @@ export const tripService = {
         throw error;
       }
 
-      const completedTrips = (trips as Trip[]).filter((t) => t.status === 'completed');
-      const totalDistance = completedTrips.reduce((sum, t) => sum + t.distance, 0);
-      const totalFare = completedTrips.reduce((sum, t) => sum + t.fare, 0);
+      const completedServiceRequests = (serviceRequests as ServiceRequest[]).filter((t) => t.status === 'completed');
+      const totalDistance = completedServiceRequests.reduce((sum, t) => sum + t.distance, 0);
+      const totalFare = completedServiceRequests.reduce((sum, t) => sum + t.fare, 0);
       const averageRating =
-        completedTrips.filter((t) => t.rating).reduce((sum, t) => sum + (t.rating || 0), 0) /
-        completedTrips.filter((t) => t.rating).length || 0;
+        completedServiceRequests.filter((t) => t.rating).reduce((sum, t) => sum + (t.rating || 0), 0) /
+        completedServiceRequests.filter((t) => t.rating).length || 0;
 
       return {
-        totalTrips: trips.length,
-        completedTrips: completedTrips.length,
+        totalServiceRequests: serviceRequests.length,
+        completedServiceRequests: completedServiceRequests.length,
         totalDistance,
         totalFare,
         averageRating,
       };
     } catch (error: any) {
-      console.error('Error fetching trip statistics:', error);
+      console.error('Error fetching serviceRequest statistics:', error);
       return null;
     }
   },

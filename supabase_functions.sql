@@ -1,14 +1,14 @@
 -- ============================================
--- SUPABASE FUNCTIONS FOR ALMA WORLD
+-- SUPABASE FUNCTIONS FOR ALMA WORLD (V2 - Corrected)
 -- ============================================
--- This file contains all the SQL functions needed for complex business logic
--- Copy and paste these functions into the Supabase SQL Editor and execute them
+-- This file contains all the SQL functions and RLS policies needed for complex business logic.
+-- Copy and paste these functions into the Supabase SQL Editor and execute them.
 
 -- ============================================
 -- 1. ORDER MANAGEMENT FUNCTIONS
 -- ============================================
 
--- Function to calculate order total with tax and delivery fee
+-- Function to calculate order total with tax and shipping fee
 CREATE OR REPLACE FUNCTION calculate_order_total(
   subtotal DECIMAL,
   shipping_fee DECIMAL DEFAULT 10,
@@ -139,10 +139,10 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- ============================================
--- 2. TAXI/TRIP MANAGEMENT FUNCTIONS
+-- 2. TAXI/SERVICE REQUEST MANAGEMENT FUNCTIONS
 -- ============================================
 
--- Function to find nearest available drivers
+-- Function to find nearest available drivers (Haversine Formula Corrected)
 CREATE OR REPLACE FUNCTION find_nearest_drivers(
   pickup_lat DECIMAL,
   pickup_lng DECIMAL,
@@ -162,18 +162,18 @@ BEGIN
     d.id,
     d.full_name,
     (6371 * 2 * ASIN(SQRT(
-      POWER(SIN((dl.lat)::DECIMAL - pickup_lat) / 2, 2) +
-      COS(pickup_lat) * COS((dl.lat)::DECIMAL) *
-      POWER(SIN((dl.lng)::DECIMAL - pickup_lng) / 2, 2)
+      POWER(SIN(RADIANS((dl.lat)::DECIMAL - pickup_lat)) / 2, 2) +
+      COS(RADIANS(pickup_lat)) * COS(RADIANS((dl.lat)::DECIMAL)) *
+      POWER(SIN(RADIANS((dl.lng)::DECIMAL - pickup_lng)) / 2, 2)
     )))::DECIMAL as distance_km,
     d.rating,
     d.vehicle_type
   FROM drivers d JOIN driver_locations dl ON d.id = dl.driver_id
   WHERE d.is_active = true
     AND (6371 * 2 * ASIN(SQRT(
-      POWER(SIN((dl.lat)::DECIMAL - pickup_lat) / 2, 2) +
-      COS(pickup_lat) * COS((dl.lat)::DECIMAL) *
-      POWER(SIN((dl.lng)::DECIMAL - pickup_lng) / 2, 2)
+      POWER(SIN(RADIANS((dl.lat)::DECIMAL - pickup_lat)) / 2, 2) +
+      COS(RADIANS(pickup_lat)) * COS(RADIANS((dl.lat)::DECIMAL)) *
+      POWER(SIN(RADIANS((dl.lng)::DECIMAL - pickup_lng)) / 2, 2)
     ))) <= radius_km
   ORDER BY distance_km ASC
   LIMIT limit_count;
@@ -193,54 +193,54 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- Function to complete trip and update driver earnings
-CREATE OR REPLACE FUNCTION complete_trip(
-  trip_id UUID,
+-- Function to complete service_requests and update driver earnings
+CREATE OR REPLACE FUNCTION complete_service_requests(
+  request_id UUID,
   driver_id UUID,
   fare_amount DECIMAL
 )
 RETURNS BOOLEAN AS $$
 BEGIN
-  -- Update trip status
+  -- Update service_requests status
   UPDATE service_requests
   SET status = 'completed',
       payment_status = 'pending',
       updated_at = NOW()
-  WHERE id = trip_id;
+  WHERE id = request_id;
 
   -- Update driver earnings
   UPDATE drivers
   SET total_earnings = total_earnings + fare_amount,
-      total_trips = total_trips + 1
+      total_service_requests = total_service_requests + 1
   WHERE id = driver_id;
 
   RETURN true;
 END;
 $$ LANGUAGE plpgsql;
 
--- Function to get driver trip statistics
-CREATE OR REPLACE FUNCTION get_driver_trip_stats(driver_id UUID)
+-- Function to get driver service_requests statistics
+CREATE OR REPLACE FUNCTION get_driver_service_requests_stats(driver_id UUID)
 RETURNS TABLE (
-  total_trips BIGINT,
-  completed_trips BIGINT,
+  total_service_requests BIGINT,
+  completed_service_requests BIGINT,
   total_distance DECIMAL,
   total_earnings DECIMAL,
   average_rating DECIMAL,
-  today_trips BIGINT,
+  today_service_requests BIGINT,
   today_earnings DECIMAL
 ) AS $$
 BEGIN
   RETURN QUERY
   SELECT
-    COUNT(*)::BIGINT as total_trips,
-    COUNT(*) FILTER (WHERE status = 'completed')::BIGINT as completed_trips,
+    COUNT(*)::BIGINT as total_service_requests,
+    COUNT(*) FILTER (WHERE status = 'completed')::BIGINT as completed_service_requests,
     COALESCE(SUM(distance), 0)::DECIMAL as total_distance,
     COALESCE(SUM(fare), 0)::DECIMAL as total_earnings,
     COALESCE(AVG(rating), 0)::DECIMAL as average_rating,
-    COUNT(*) FILTER (WHERE DATE(created_at) = CURRENT_DATE)::BIGINT as today_trips,
+    COUNT(*) FILTER (WHERE DATE(created_at) = CURRENT_DATE)::BIGINT as today_service_requests,
     COALESCE(SUM(fare) FILTER (WHERE DATE(created_at) = CURRENT_DATE), 0)::DECIMAL as today_earnings
   FROM service_requests
-  WHERE driver_id = get_driver_trip_stats.driver_id;
+  WHERE driver_id = get_driver_service_requests_stats.driver_id;
 END;
 $$ LANGUAGE plpgsql;
 
@@ -312,106 +312,56 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- Function to send trip status notification
-CREATE OR REPLACE FUNCTION notify_trip_status_change(
-  trip_id UUID,
+-- Function to send service_requests status notification
+CREATE OR REPLACE FUNCTION notify_service_requests_status_change(
+  request_id UUID,
   new_status VARCHAR
 )
 RETURNS VOID AS $$
 DECLARE
-  trip_record RECORD;
+  request_record RECORD;
   notification_message VARCHAR;
 BEGIN
-  -- Get trip details
-  SELECT id, user_id INTO trip_record
+  -- Get service_requests details
+  SELECT id, user_id INTO request_record
   FROM service_requests
-  WHERE id = trip_id;
+  WHERE id = request_id;
 
   -- Determine notification message based on status
   CASE new_status
     WHEN 'accepted' THEN
-      notification_message := 'Your trip request has been accepted by a driver';
+      notification_message := 'Your service request has been accepted by a driver';
     WHEN 'in_progress' THEN
-      notification_message := 'Your trip is now in progress';
+      notification_message := 'Your service is now in progress';
     WHEN 'completed' THEN
-      notification_message := 'Your trip has been completed';
+      notification_message := 'Your service has been completed';
     WHEN 'cancelled' THEN
-      notification_message := 'Your trip has been cancelled';
+      notification_message := 'Your service request has been cancelled';
     ELSE
-      notification_message := 'Your trip status has been updated';
+      notification_message := 'Your service request status has been updated';
   END CASE;
 
   -- Create notification
   PERFORM create_notification(
-    trip_record.user_id,
-    'delivery',
-    'Trip Status Update',
+    request_record.user_id,
+    'service',
+    'Service Status Update',
     notification_message,
-    jsonb_build_object('tripId', trip_id, 'status', new_status)
+    jsonb_build_object('requestId', request_id, 'status', new_status)
   );
 END;
 $$ LANGUAGE plpgsql;
 
 -- ============================================
--- 4. PRODUCT MANAGEMENT FUNCTIONS
+-- 4. TRIGGERS
 -- ============================================
 
--- Function to update product rating
-CREATE OR REPLACE FUNCTION update_product_rating(product_id UUID)
-RETURNS DECIMAL AS $$
-DECLARE
-  avg_rating DECIMAL;
-  review_count BIGINT;
-BEGIN
-  SELECT
-    COALESCE(AVG(rating), 0)::DECIMAL,
-    COUNT(*)::BIGINT
-  INTO avg_rating, review_count
-  FROM reviews
-  WHERE product_id = update_product_rating.product_id;
-
-  UPDATE products
-  SET rating = avg_rating,
-      review_count = review_count,
-      updated_at = NOW()
-  WHERE id = product_id;
-
-  RETURN avg_rating;
-END;
-$$ LANGUAGE plpgsql;
-
--- Function to update vendor rating
-CREATE OR REPLACE FUNCTION update_vendor_rating(vendor_id UUID)
-RETURNS DECIMAL AS $$
-DECLARE
-  avg_rating DECIMAL;
-  review_count BIGINT;
-BEGIN
-  SELECT
-    COALESCE(AVG(rating), 0)::DECIMAL,
-    COUNT(*)::BIGINT
-  INTO avg_rating, review_count
-  FROM reviews
-  WHERE vendor_id = update_vendor_rating.vendor_id;
-
-  UPDATE vendors
-  SET rating = avg_rating,
-      review_count = review_count
-  WHERE id = vendor_id;
-
-  RETURN avg_rating;
-END;
-$$ LANGUAGE plpgsql;
-
--- ============================================
--- 5. TRIGGERS (OPTIONAL - For Automation)
--- ============================================
-
--- Trigger to automatically notify when order status changes
+-- Trigger function for order status notification
 CREATE OR REPLACE FUNCTION trigger_order_status_notification()
 RETURNS TRIGGER AS $$
 BEGIN
-  IF NEW.status != OLD.status THEN
+  -- Safety check: Avoid infinite loop by ensuring the status has actually changed
+  IF OLD.status IS DISTINCT FROM NEW.status THEN
     PERFORM notify_order_status_change(NEW.id, NEW.status);
   END IF;
   RETURN NEW;
@@ -425,121 +375,158 @@ AFTER UPDATE ON orders
 FOR EACH ROW
 EXECUTE FUNCTION trigger_order_status_notification();
 
--- Trigger to automatically notify when trip status changes
-CREATE OR REPLACE FUNCTION trigger_trip_status_notification()
+-- Trigger function for service_requests status notification
+CREATE OR REPLACE FUNCTION trigger_service_requests_status_notification()
 RETURNS TRIGGER AS $$
 BEGIN
-  IF NEW.status != OLD.status THEN
-    PERFORM notify_trip_status_change(NEW.id, NEW.status);
+  -- Safety check: Avoid infinite loop by ensuring the status has actually changed
+  IF OLD.status IS DISTINCT FROM NEW.status THEN
+    PERFORM notify_service_requests_status_change(NEW.id, NEW.status);
   END IF;
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
 
--- Create trigger for trip status changes
-DROP TRIGGER IF EXISTS trip_status_notification ON trips;
-CREATE TRIGGER trip_status_notification
-AFTER UPDATE ON trips
+-- Create trigger for service_requests status changes
+DROP TRIGGER IF EXISTS service_requests_status_notification ON service_requests;
+CREATE TRIGGER service_requests_status_notification
+AFTER UPDATE ON service_requests
 FOR EACH ROW
-EXECUTE FUNCTION trigger_trip_status_notification();
+EXECUTE FUNCTION trigger_service_requests_status_notification();
 
 -- Trigger to update product rating when review is added/updated
-CREATE OR REPLACE FUNCTION trigger_update_product_rating()
+CREATE OR REPLACE FUNCTION update_product_rating()
 RETURNS TRIGGER AS $$
 BEGIN
-  IF NEW.product_id IS NOT NULL THEN
-    PERFORM update_product_rating(NEW.product_id);
-  END IF;
+  UPDATE products
+  SET
+    rating = (SELECT AVG(rating) FROM reviews WHERE product_id = NEW.product_id),
+    review_count = (SELECT COUNT(*) FROM reviews WHERE product_id = NEW.product_id)
+  WHERE id = NEW.product_id;
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
 
--- Create trigger for product rating updates
-DROP TRIGGER IF EXISTS update_product_rating_trigger ON reviews;
-CREATE TRIGGER update_product_rating_trigger
-AFTER INSERT OR UPDATE ON reviews
+-- Create trigger for review changes
+DROP TRIGGER IF EXISTS review_update_product_rating ON reviews;
+CREATE TRIGGER review_update_product_rating
+AFTER INSERT OR UPDATE OR DELETE ON reviews
 FOR EACH ROW
-EXECUTE FUNCTION trigger_update_product_rating();
-
--- Trigger to update vendor rating when review is added/updated
-CREATE OR REPLACE FUNCTION trigger_update_vendor_rating()
-RETURNS TRIGGER AS $$
-BEGIN
-  IF NEW.vendor_id IS NOT NULL THEN
-    PERFORM update_vendor_rating(NEW.vendor_id);
-  END IF;
-  RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-
--- Create trigger for vendor rating updates
-DROP TRIGGER IF EXISTS update_vendor_rating_trigger ON reviews;
-CREATE TRIGGER update_vendor_rating_trigger
-AFTER INSERT OR UPDATE ON reviews
-FOR EACH ROW
-EXECUTE FUNCTION trigger_update_vendor_rating();
+EXECUTE FUNCTION update_product_rating();
 
 -- ============================================
--- 6. ROW LEVEL SECURITY (RLS) POLICIES
+-- 5. ROW LEVEL SECURITY (RLS) POLICIES
 -- ============================================
 
 -- Enable RLS on tables
 ALTER TABLE users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE orders ENABLE ROW LEVEL SECURITY;
-ALTER TABLE trips ENABLE ROW LEVEL SECURITY;
+ALTER TABLE service_requests ENABLE ROW LEVEL SECURITY;
 ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;
 ALTER TABLE reviews ENABLE ROW LEVEL SECURITY;
+ALTER TABLE products ENABLE ROW LEVEL SECURITY;
+ALTER TABLE categories ENABLE ROW LEVEL SECURITY;
+ALTER TABLE branches ENABLE ROW LEVEL SECURITY;
 
--- Users can only see their own profile
+-- Helper function to get user role
+CREATE OR REPLACE FUNCTION get_user_role()
+RETURNS VARCHAR AS $$
+  SELECT role FROM users WHERE id = auth.uid();
+$$ LANGUAGE sql STABLE;
+
+-- 5.1. Users Table Policies
+-- Users can view their own profile
 CREATE POLICY "Users can view own profile"
   ON users FOR SELECT
   USING (auth.uid() = id);
+
+-- Admin can view all users
+CREATE POLICY "Admin can view all users"
+  ON users FOR SELECT
+  USING (get_user_role() = 'admin');
 
 -- Users can update their own profile
 CREATE POLICY "Users can update own profile"
   ON users FOR UPDATE
   USING (auth.uid() = id);
 
--- Users can only see their own orders
-CREATE POLICY "Users can view own orders"
-  ON orders FOR SELECT
-  USING (auth.uid() = user_id);
-
--- Users can only see their own trips
-CREATE POLICY "Users can view own trips"
-  ON trips FOR SELECT
-  USING (auth.uid() = user_id);
-
--- Users can only see their own notifications
-CREATE POLICY "Users can view own notifications"
-  ON notifications FOR SELECT
-  USING (auth.uid() = user_id);
-
--- Users can only see reviews for their own orders
-CREATE POLICY "Users can view own reviews"
-  ON reviews FOR SELECT
-  USING (auth.uid() = user_id);
-
--- Products are readable by all authenticated users
-CREATE POLICY "Products are readable by all"
+-- 5.2. Products, Categories, Branches Policies (Public Read Access)
+-- Products: Enable read access for all users (Public)
+CREATE POLICY "Products are public"
   ON products FOR SELECT
   USING (true);
 
--- Categories are readable by all authenticated users
-CREATE POLICY "Categories are readable by all"
+-- Categories: Enable read access for all users (Public)
+CREATE POLICY "Categories are public"
   ON categories FOR SELECT
   USING (true);
 
--- Vendors are readable by all authenticated users
-CREATE POLICY "Vendors are readable by all"
-  ON vendors FOR SELECT
+-- Branches: Enable read access for all users (Public)
+CREATE POLICY "Branches are public"
+  ON branches FOR SELECT
   USING (true);
 
--- Drivers are readable by all authenticated users (for trip requests)
-CREATE POLICY "Drivers are readable by all"
-  ON drivers FOR SELECT
+-- Admin/Vendor can manage products
+CREATE POLICY "Admin and Vendor can manage products"
+  ON products FOR ALL
+  USING (get_user_role() IN ('admin', 'vendor'))
+  WITH CHECK (get_user_role() IN ('admin', 'vendor'));
+
+-- 5.3. Orders Policies
+-- Admin/Vendor/Delivery can view all orders, Users can view own orders
+CREATE POLICY "Orders: Role-based read access"
+  ON orders FOR SELECT
+  USING (auth.uid() = user_id OR get_user_role() IN ('admin', 'vendor', 'delivery'));
+
+-- Users can create orders
+CREATE POLICY "Orders: Users can create"
+  ON orders FOR INSERT
+  WITH CHECK (auth.uid() = user_id);
+
+-- Admin/Vendor/Delivery can update order status
+CREATE POLICY "Orders: Role-based update status"
+  ON orders FOR UPDATE
+  USING (get_user_role() IN ('admin', 'vendor', 'delivery'));
+
+-- 5.4. Service Requests Policies
+-- Admin/Driver can view all service_requests, Users can view own service_requests
+CREATE POLICY "Service Requests: Role-based read access"
+  ON service_requests FOR SELECT
+  USING (auth.uid() = user_id OR get_user_role() IN ('admin', 'driver'));
+
+-- Users can create service_requests
+CREATE POLICY "Service Requests: Users can create"
+  ON service_requests FOR INSERT
+  WITH CHECK (auth.uid() = user_id);
+
+-- Admin/Driver can update service_requests status
+CREATE POLICY "Service Requests: Role-based update status"
+  ON service_requests FOR UPDATE
+  USING (get_user_role() IN ('admin', 'driver'));
+
+-- 5.5. Notifications Policies
+-- Admin can view all notifications, Users can view own notifications
+CREATE POLICY "Notifications: Role-based read access"
+  ON notifications FOR SELECT
+  USING (auth.uid() = user_id OR get_user_role() = 'admin');
+
+-- Users can update their own notifications (mark as read)
+CREATE POLICY "Notifications: Users can update own"
+  ON notifications FOR UPDATE
+  USING (auth.uid() = user_id);
+
+-- 5.6. Reviews Policies
+-- Reviews are public (read access for all)
+CREATE POLICY "Reviews are public"
+  ON reviews FOR SELECT
   USING (true);
 
--- ============================================
--- END OF SUPABASE FUNCTIONS
--- ============================================
+-- Users can create reviews
+CREATE POLICY "Reviews: Users can create"
+  ON reviews FOR INSERT
+  WITH CHECK (auth.uid() = user_id);
+
+-- Users can update/delete their own reviews
+CREATE POLICY "Reviews: Users can manage own"
+  ON reviews FOR UPDATE, DELETE
+  USING (auth.uid() = user_id);
