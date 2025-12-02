@@ -38,6 +38,9 @@ import LoginPage from '@pages/auth/LoginPage';
 import RegisterPage from '@pages/auth/RegisterPage';
 import ForgotPasswordPage from '@pages/auth/ForgotPasswordPage';
 
+// ⭐ تمت إضافة صفحة الخريطة هنا
+import MapPage from '@pages/MapPage';
+
 // Protected Route Component
 const ProtectedRoute: React.FC<{ children: React.ReactNode; adminOnly?: boolean }> = ({ 
   children, 
@@ -87,6 +90,9 @@ function App() {
             <Route path="product/:id" element={<ProductDetailPage />} />
             <Route path="vendor/:id" element={<VendorPage />} />
             <Route path="search" element={<SearchPage />} />
+
+            {/* ⭐ إضافة صفحة الخريطة هنا */}
+            <Route path="map" element={<MapPage />} />
           </Route>
 
           {/* Auth Routes */}
