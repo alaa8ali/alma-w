@@ -3,12 +3,17 @@ import ReactDOM from 'react-dom/client';
 import App from './App';
 import './styles/index.css';
 
+// ⚡ Leaflet CSS (يجب أن يكون هنا)
+import 'leaflet/dist/leaflet.css';
+
 // Register Service Worker for PWA
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').catch((error) => {
-      console.log('SW registration failed:', error);
-    });
+    navigator.serviceWorker
+      .register('/sw.js')
+      .catch((error) => {
+        console.log('SW registration failed:', error);
+      });
   });
 }
 
